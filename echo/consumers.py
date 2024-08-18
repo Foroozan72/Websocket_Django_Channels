@@ -28,6 +28,45 @@ class EchoConsumer(WebsocketConsumer):
         elif bytes_data:
             self.send(bytes_data=bytes_data) 
 
+# class ChatConsumer(AsyncWebsocketConsumer):
+#     async def connect(self):
+#         self.username = self.scope['url_route']['kwargs']['username']
+#         self.group_name = f"chat_{self.username}"
+
+#         await self.channel_layer.group_add(
+#             self.group_name,
+#             self.channel_name
+#         )
+
+#         await self.accept()
+#         # print(self.channel_name)
+        
+
+#     async def disconnect(self, close_code):
+#         await self.channel_layer.group_discard(
+#             self.group_name,
+#             self.channel_name
+#         )
+
+#     async def receive(self, text_data=None, bytes_data=None):
+#         if text_data:
+#             text_data_json = json.loads(text_data)
+#             username = text_data_json['receiver']
+#             user_group_name = f"chat_{username}"
+
+#             await self.channel_layer.group_send(
+#                 user_group_name,
+#                 {
+#                     'type' : 'chat_message',
+#                     'message' : text_data
+#                 })
+
+#     async def chat_message(self,event):
+#         message = event['message']
+
+#         await self.send(text_data=message)
+
+
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.username = self.scope['url_route']['kwargs']['username']
@@ -39,9 +78,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
-        # print(self.channel_name)
         
-
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             self.group_name,
@@ -54,17 +91,52 @@ class ChatConsumer(AsyncWebsocketConsumer):
             username = text_data_json['receiver']
             user_group_name = f"chat_{username}"
 
-            await self.channel_layer.group_send(
-                user_group_name,
-                {
-                    'type' : 'chat_message',
-                    'message' : text_data
-                })
+            if 'audio' in text_data_json:
+                # Handling audio messages
+                await self.channel_layer.group_send(
+                    user_group_name,
+                    {
+                        'type': 'audio_message',
+                        'audio': text_data_json['audio'],
+                        'sender': text_data_json['sender']
+                    }
+                )
+            elif 'text' in text_data_json:
+                # Handling text messages
+                await self.channel_layer.group_send(
+                    user_group_name,
+                    {
+                        'type': 'chat_message',
+                        'message': text_data_json['text'],
+                        'sender': text_data_json['sender']
+                    }
+                )
+            else:
+                # Handling unsupported message types
+                print("Unsupported message type received.")
 
-    async def chat_message(self,event):
+    async def chat_message(self, event):
         message = event['message']
+        sender = event['sender']
 
-        await self.send(text_data=message)
+        # Sending the text message back to the client
+        await self.send(text_data=json.dumps({
+            'type': 'text',
+            'text': message,
+            'sender': sender
+        }))
+
+    async def audio_message(self, event):
+        audio = event['audio']
+        sender = event['sender']
+
+        # Sending the audio data back to the client
+        await self.send(text_data=json.dumps({
+            'type': 'audio',
+            'audio': audio,
+            'sender': sender
+        }))
+
 
 
 class ChatConsumer2(AsyncConsumer):

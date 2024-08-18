@@ -73,9 +73,9 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 #channels
 
-ASGI_APPLICATION = 'core.routing.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
-ASGI_APPLICATION = "mysite.asgi.application"
+
 
 CHANNEL_LAYERS = {
     "default": {

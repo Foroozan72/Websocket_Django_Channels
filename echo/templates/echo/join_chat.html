@@ -23,7 +23,7 @@
           <div class="card">
             <div class="card-body">
               <h5 class="card-title">Send Message</h5>
-              <p>You loged in as: <strong id="user_id"></strong></p>
+              <p>You logged in as: <strong id="user_id"></strong></p>
               <div class="input-group flex-nowrap mb-2">
                 <div class="input-group-prepend">
                   <span class="input-group-text" id="addon-wrapping">@</span>
@@ -37,6 +37,11 @@
                 <input id="msg-input" type="text" class="form-control" placeholder="Message Text" aria-label="Message Text" aria-describedby="addon-wrapping">
               </div>
               <button id="msg-submit" type="button" class="btn btn-primary" onclick="btnSend()">Send</button>
+              <!-- Buttons for Voice Recording -->
+              <div class="mt-3">
+                <button id="record-start" type="button" class="btn btn-success" onclick="startRecording()">Start Recording</button>
+                <button id="record-stop" type="button" class="btn btn-danger" onclick="stopRecording()" disabled>Stop Recording</button>
+              </div>
             </div>
           </div>
         </div>
@@ -51,7 +56,7 @@
       </div>
     </div>
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4x0xIM+B07jRM" crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
     <!-- Optional JavaScript -->
     <script>
@@ -64,14 +69,29 @@
 
       socket.onmessage = function(e) {
         var message = JSON.parse(e.data);
-        $('#messages-list').prepend(`
-          <div class="media mb-2">
-            <div class="media-body">
-              <h6 class="mt-0"><strong>USERNAME</strong></h6>
-              MESSAGE
+
+        if (message.type === 'audio') {
+          const audioElement = document.createElement('audio');
+          audioElement.src = 'data:audio/ogg;base64,' + message.audio;
+          audioElement.controls = true;
+          document.getElementById('messages-list').prepend(`
+            <div class="media mb-2">
+              <div class="media-body">
+                <h6 class="mt-0"><strong>${message.sender}</strong></h6>
+              </div>
             </div>
-          </div>
-        `.replace('USERNAME', message['sender']).replace('MESSAGE', message['text']));
+          `);
+          document.getElementById('messages-list').prepend(audioElement);
+        } else {
+          $('#messages-list').prepend(`
+            <div class="media mb-2">
+              <div class="media-body">
+                <h6 class="mt-0"><strong>USERNAME</strong></h6>
+                MESSAGE
+              </div>
+            </div>
+          `.replace('USERNAME', message['sender']).replace('MESSAGE', message['text']));
+        }
       };
 
       socket.onclose = function(e) {
@@ -104,6 +124,59 @@
 
         messageInputDom.value = '';
       };
+
+      let mediaRecorder;
+      let audioChunks = [];
+
+      // Function to start recording
+      function startRecording() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+
+            // Disable start button and enable stop button
+            document.getElementById("record-start").disabled = true;
+            document.getElementById("record-stop").disabled = false;
+
+            mediaRecorder.addEventListener("dataavailable", event => {
+              audioChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener("stop", () => {
+              const audioBlob = new Blob(audioChunks, { 'type': 'audio/ogg; codecs=opus' });
+              audioChunks = [];
+              sendVoiceMessage(audioBlob);  // Send the recorded voice
+            });
+          });
+      }
+
+      // Function to stop recording
+      function stopRecording() {
+        mediaRecorder.stop();
+
+        // Enable start button and disable stop button
+        document.getElementById("record-start").disabled = false;
+        document.getElementById("record-stop").disabled = true;
+      }
+
+      // Function to send the recorded voice message
+      function sendVoiceMessage(audioBlob) {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);  // Convert blob to Base64
+
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];  // Extract the Base64 part
+          const username = document.querySelector('#username-input').value;
+          
+          // Send the audio data through WebSocket
+          socket.send(JSON.stringify({
+            'sender': my_username,
+            'receiver': username,
+            'audio': base64data
+          }));
+        };
+      }
     </script>
   </body>
 </html>
